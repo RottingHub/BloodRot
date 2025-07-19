@@ -1,0 +1,772 @@
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+
+local Player = Players.LocalPlayer
+local teleporting = false
+
+local multipliers = {
+	K = 1e3, M = 1e6, B = 1e9, T = 1e12, Q = 1e15,
+	Qa = 1e18, Qi = 1e21, Sx = 1e24, Sp = 1e27,
+	Oc = 1e30, No = 1e33, Dc = 1e36, Vg = 1e39,
+	Tg = 1e42, Qg = 1e45, Qh = 1e48, Sh = 1e51,
+	St = 1e54, Og = 1e57, Nh = 1e60,
+}
+
+local function suffixToNumber(str)
+	local numPart, suffix = string.match(str, "([%d%.]+)(%a%a)")
+	if not numPart then
+		numPart, suffix = string.match(str, "([%d%.]+)(%a)")
+	end
+	if not numPart then
+		numPart = str
+		suffix = nil
+	end
+	local num = tonumber(numPart)
+	if not num then return nil end
+	if suffix then
+		suffix = suffix:upper()
+		local mult = multipliers[suffix]
+		if mult then
+			num = num * mult
+		end
+	end
+	return num
+end
+
+local function extractValueAndText(text)
+	if not text then return nil, nil end
+	local valueStr = string.match(text, "%$(.-)/")
+	if not valueStr then return nil, nil end
+	local num = suffixToNumber(valueStr)
+	if not num then return nil, nil end
+	return num, "$" .. valueStr .. "/s"
+end
+
+local function showBillboard(spawnPart, generationText, displayNameText)
+	if not spawnPart or not spawnPart:IsA("BasePart") then return end
+
+	local gui = spawnPart:FindFirstChild("GenBillboard")
+	if gui then gui:Destroy() end
+
+	gui = Instance.new("BillboardGui")
+	gui.Name = "GenBillboard"
+	gui.Size = UDim2.new(0, 100, 0, 50)
+	gui.StudsOffset = Vector3.new(0, 5, 0)
+	gui.AlwaysOnTop = true
+	gui.Adornee = spawnPart
+	gui.MaxDistance = math.huge
+	gui.Parent = spawnPart
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "DisplayName"
+	nameLabel.Size = UDim2.new(1, 0, 0.55, 0)
+	nameLabel.Position = UDim2.new(0, 0, 0, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.TextScaled = true
+	nameLabel.Font = Enum.Font.FredokaOne
+	nameLabel.TextColor3 = Color3.fromRGB(255, 0, 200)
+	nameLabel.Text = displayNameText or ""
+	nameLabel.Parent = gui
+
+	local nameStroke = Instance.new("UIStroke")
+	nameStroke.Color = Color3.fromRGB(0, 0, 0)
+	nameStroke.Thickness = 4
+	nameStroke.Transparency = 0.2
+	nameStroke.Parent = nameLabel
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Text"
+	label.Size = UDim2.new(1, 0, 0.45, 0)
+	label.Position = UDim2.new(0, 0, 0.55, 0)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Font = Enum.Font.FredokaOne
+	label.TextColor3 = Color3.fromRGB(255, 221, 40)
+	label.Text = generationText
+	label.Parent = gui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Name = "TextStroke"
+	stroke.Color = Color3.fromRGB(0, 0, 0)
+	stroke.Thickness = 3
+	stroke.Transparency = 0.3
+	stroke.Parent = label
+end
+
+local function showRemainingTimeBillboard(friendMain, text)
+	if not friendMain then return end
+
+	local existing = friendMain:FindFirstChild("RemainingTimeBillboard")
+	if existing then
+		existing:Destroy()
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "RemainingTimeBillboard"
+	billboard.Size = UDim2.new(0, 40, 0, 20)
+	billboard.StudsOffset = Vector3.new(0, 5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = friendMain.Parent
+	billboard.MaxDistance = math.huge
+	billboard.Parent = friendMain
+
+	local label = Instance.new("TextLabel")
+	label.Name = "RemainingTimeText"
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Font = Enum.Font.FredokaOne
+	label.TextColor3 = Color3.fromRGB(160, 30, 30) -- BloodRot red-ish color
+	label.Text = text or "N/A"
+	label.Parent = billboard
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(70, 0, 0)
+	stroke.Thickness = 4
+	stroke.Transparency = 0.2
+	stroke.Parent = label
+end
+
+local function getHighestGeneration()
+	local plotsFolder = workspace:FindFirstChild("Plots")
+	if not plotsFolder then return end
+
+	-- Clear previous GenBillboards
+	for _, plot in ipairs(plotsFolder:GetChildren()) do
+		if plot:IsA("Model") then
+			local animalPodiums = plot:FindFirstChild("AnimalPodiums")
+			if animalPodiums then
+				for _, podium in ipairs(animalPodiums:GetChildren()) do
+					if podium:IsA("Model") then
+						local base = podium:FindFirstChild("Base")
+						if base then
+							local spawn = base:FindFirstChild("Spawn")
+							if spawn then
+								local gui = spawn:FindFirstChild("GenBillboard")
+								if gui then gui:Destroy() end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	-- Clear RemainingTimeBillboards & create new ones
+	for _, plot in ipairs(plotsFolder:GetChildren()) do
+		if plot:IsA("Model") then
+			local plotSign = plot:FindFirstChild("PlotSign")
+			if plotSign then
+
+				-- Check SurfaceGui > Frame > TextLabel Text == "Empty Base" to remove RemainingTimeBillboard
+				local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
+				if surfaceGui then
+					local frame = surfaceGui:FindFirstChildOfClass("Frame")
+					if frame then
+						local textLabel = frame:FindFirstChildOfClass("TextLabel")
+						if textLabel and textLabel.Text == "Empty Base" then
+							local friendPanel = plot:FindFirstChild("FriendPanel")
+							if friendPanel then
+								local friendMain = friendPanel:FindFirstChild("Main")
+								if friendMain then
+									local remainingGui = friendMain:FindFirstChild("RemainingTimeBillboard")
+									if remainingGui then
+										remainingGui:Destroy()
+									end
+								end
+							end
+							-- Skip creating remaining time billboard if empty base
+							continue
+						end
+					end
+				end
+
+				-- Create RemainingTime billboard from random PlotBlock RemainingTime text
+				local purchases = plot:FindFirstChild("Purchases")
+				if purchases then
+					local plotBlocks = {}
+					for _, child in ipairs(purchases:GetChildren()) do
+						if child.Name == "PlotBlock" then
+							table.insert(plotBlocks, child)
+						end
+					end
+
+					if #plotBlocks > 0 then
+						local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
+						local main = randomBlock:FindFirstChild("Main")
+						if main then
+							local billboardGui = main:FindFirstChildOfClass("BillboardGui")
+							if billboardGui then
+								local remainingTimeLabel = billboardGui:FindFirstChild("RemainingTime")
+								if remainingTimeLabel and remainingTimeLabel:IsA("TextLabel") then
+									local remainingText = remainingTimeLabel.Text
+									local friendPanel = plot:FindFirstChild("FriendPanel")
+									if friendPanel then
+										local friendMain = friendPanel:FindFirstChild("Main")
+										if friendMain then
+											showRemainingTimeBillboard(friendMain, remainingText)
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	-- Find highest generation as before (unchanged)
+	local highestValue = 0
+	local highestSpawns = {}
+	local displayText = "$0/s"
+	local displayNameMap = {}
+
+	for _, plot in ipairs(plotsFolder:GetChildren()) do
+		if plot:IsA("Model") then
+			local plotSign = plot:FindFirstChild("PlotSign")
+			local skipPlot = false
+
+			if plotSign then
+				local yourBase = plotSign:FindFirstChild("YourBase")
+				if yourBase and yourBase:IsA("BillboardGui") and yourBase.Enabled == true then
+					skipPlot = true
+				end
+			end
+
+			if not skipPlot then
+				local animalPodiums = plot:FindFirstChild("AnimalPodiums")
+				if animalPodiums then
+					for _, podium in ipairs(animalPodiums:GetChildren()) do
+						if podium:IsA("Model") then
+							local base = podium:FindFirstChild("Base")
+							if base then
+								local spawn = base:FindFirstChild("Spawn")
+								if spawn then
+									local attachment = spawn:FindFirstChild("Attachment")
+									if attachment then
+										local overhead = attachment:FindFirstChild("AnimalOverhead")
+										if overhead then
+											local genLabel = overhead:FindFirstChild("Generation")
+											local nameLabel = overhead:FindFirstChild("DisplayName")
+											if genLabel and genLabel:IsA("TextLabel") then
+												local value, text = extractValueAndText(genLabel.Text)
+												if value then
+													if value > highestValue then
+														highestValue = value
+														highestSpawns = { spawn }
+														displayText = text
+														displayNameMap = {
+															[spawn] = (nameLabel and nameLabel.Text) or ""
+														}
+													elseif value == highestValue then
+														table.insert(highestSpawns, spawn)
+														displayNameMap[spawn] = (nameLabel and nameLabel.Text) or ""
+													end
+												end
+											end
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	for _, spawn in ipairs(highestSpawns) do
+		showBillboard(spawn, displayText, displayNameMap[spawn])
+	end
+end
+
+-- Recursive updater with delay (instead of infinite loop)
+local function updateHighestGeneration()
+	getHighestGeneration()
+	task.delay(0.25, updateHighestGeneration)
+end
+
+updateHighestGeneration()
+
+-- Rejoin GUI
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RejoinCompactUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+screenGui.DisplayOrder = 2147483647
+screenGui.Parent = CoreGui
+
+-- Create main frame
+local UI = Instance.new("Frame")
+UI.Size = UDim2.new(0, 140, 0, 100)
+UI.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
+UI.BorderSizePixel = 0
+UI.Parent = screenGui
+Instance.new("UICorner", UI).CornerRadius = UDim.new(0, 10)
+
+-- Outline
+local outline = Instance.new("Frame")
+outline.Size = UDim2.new(1, 0, 1, 0)
+outline.BackgroundColor3 = Color3.fromRGB(120, 10, 10)
+outline.BorderSizePixel = 0
+outline.ZIndex = UI.ZIndex - 1
+outline.Parent = UI
+Instance.new("UICorner", outline).CornerRadius = UDim.new(0, 10)
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 28)
+Title.BackgroundColor3 = Color3.fromRGB(90, 0, 0)
+Title.BorderSizePixel = 0
+Title.Text = "Blood Rot 🩸"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = UI
+Instance.new("UIPadding", Title).PaddingLeft = UDim.new(0, 8)
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
+
+-- Close Button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 24, 0, 24)
+closeBtn.Position = UDim2.new(1, -28, 0, 2)
+closeBtn.BackgroundColor3 = Color3.fromRGB(130, 0, 0)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.BorderSizePixel = 0
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = Title
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(1, 0)
+
+closeBtn.MouseEnter:Connect(function()
+	TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+		BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+	}):Play()
+end)
+
+closeBtn.MouseLeave:Connect(function()
+	TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+		BackgroundColor3 = Color3.fromRGB(130, 0, 0)
+	}):Play()
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+	screenGui:Destroy()
+end)
+
+-- Rejoin button
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(1, 0, 0, 30)
+button.Position = UDim2.new(0, 0, 0.44, 0)
+button.AnchorPoint = Vector2.new(0, 0.5)
+button.BackgroundColor3 = Color3.fromRGB(140, 0, 0)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.Text = "Rejoin"
+button.Font = Enum.Font.GothamMedium
+button.TextSize = 16
+button.AutoButtonColor = false
+button.Parent = UI
+Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
+
+button.MouseEnter:Connect(function()
+	TweenService:Create(button, TweenInfo.new(0.2), {
+		BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+	}):Play()
+end)
+
+button.MouseLeave:Connect(function()
+	TweenService:Create(button, TweenInfo.new(0.2), {
+		BackgroundColor3 = Color3.fromRGB(140, 0, 0)
+	}):Play()
+end)
+
+button.MouseButton1Click:Connect(function()
+	if teleporting then return end
+	teleporting = true
+	pcall(function()
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, Player)
+	end)
+end)
+
+-- Hide GUI button
+local hideBtn = Instance.new("TextButton")
+hideBtn.Size = UDim2.new(1, 0, 0, 30)
+hideBtn.Position = UDim2.new(0, 0, 0.80, 0)
+hideBtn.AnchorPoint = Vector2.new(0, 0.5)
+hideBtn.BackgroundColor3 = Color3.fromRGB(90, 0, 0)
+hideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+hideBtn.Text = "Hide GUIs"
+hideBtn.Font = Enum.Font.GothamMedium
+hideBtn.TextSize = 16
+hideBtn.AutoButtonColor = false
+hideBtn.Parent = UI
+Instance.new("UICorner", hideBtn).CornerRadius = UDim.new(0, 6)
+
+hideBtn.MouseEnter:Connect(function()
+	TweenService:Create(hideBtn, TweenInfo.new(0.2), {
+		BackgroundColor3 = Color3.fromRGB(130, 0, 0)
+	}):Play()
+end)
+
+hideBtn.MouseLeave:Connect(function()
+	TweenService:Create(hideBtn, TweenInfo.new(0.2), {
+		BackgroundColor3 = Color3.fromRGB(90, 0, 0)
+	}):Play()
+end)
+
+local guisHidden = false
+hideBtn.MouseButton1Click:Connect(function()
+	guisHidden = not guisHidden
+	for _, gui in pairs(Player:WaitForChild("PlayerGui"):GetChildren()) do
+		if gui:IsA("ScreenGui") and gui ~= screenGui then
+			gui.Enabled = not guisHidden
+		end
+	end
+	hideBtn.Text = guisHidden and "Show GUIs" or "Hide GUIs"
+end)
+
+-- Position updater for LifeaStealSystemGui (no loop, event driven)
+local targetPosition = UDim2.new(0.5, -458, 0.5, -180)
+
+local function setPositionTwice(gui)
+	local frame = gui:FindFirstChildWhichIsA("Frame", true)
+	if frame then
+		frame.Position = targetPosition
+		frame.Position = targetPosition
+	end
+end
+
+local function onGuiAdded(child)
+	if child.Name == "LifeaStealSystemGui" then
+		setPositionTwice(child)
+	end
+end
+
+local existingGui = Player.PlayerGui:FindFirstChild("LifeaStealSystemGui")
+if existingGui then
+	setPositionTwice(existingGui)
+end
+
+Player.PlayerGui.ChildAdded:Connect(onGuiAdded)
+
+-- God Mode and Infinite Jump setup
+
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Player
+
+local function enableGodMode(humanoid)
+	humanoid.MaxHealth = math.huge
+	humanoid.Health = math.huge
+
+	humanoid.HealthChanged:Connect(function()
+		if humanoid.Health < humanoid.MaxHealth then
+			humanoid.Health = humanoid.MaxHealth
+		end
+	end)
+end
+
+local function setupCharacter(char)
+	local humanoid = char:WaitForChild("Humanoid")
+	local hrp = char:WaitForChild("HumanoidRootPart")
+
+	enableGodMode(humanoid)
+
+	-- Infinite jump
+	UserInputService.JumpRequest:Connect(function()
+		if humanoid and humanoid.Health > 0 then
+			humanoid.Jump = true
+		end
+	end)
+
+	-- Respawn teleport on death
+	humanoid.Died:Connect(function()
+		if not teleporting then
+			teleporting = true
+			pcall(function()
+				TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, Player)
+			end)
+		end
+	end)
+end
+
+if Player.Character then
+	setupCharacter(Player.Character)
+end
+Player.CharacterAdded:Connect(setupCharacter)
+
+-- FPS Display (via RenderStepped)
+
+local fpsCounter = Instance.new("TextLabel")
+fpsCounter.Name = "FPSLabel"
+fpsCounter.Size = UDim2.new(0, 60, 0, 30)
+fpsCounter.Position = UDim2.new(1, -70, 0, 5)
+fpsCounter.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
+fpsCounter.BorderSizePixel = 0
+fpsCounter.TextColor3 = Color3.fromRGB(255, 255, 255)
+fpsCounter.Font = Enum.Font.GothamBold
+fpsCounter.TextSize = 16
+fpsCounter.Text = "FPS: 0"
+fpsCounter.Parent = screenGui
+Instance.new("UICorner", fpsCounter).CornerRadius = UDim.new(0, 6)
+
+local lastTime = tick()
+local frameCount = 0
+
+RunService.RenderStepped:Connect(function()
+	frameCount += 1
+	local now = tick()
+	local delta = now - lastTime
+	if delta >= 1 then
+		fpsCounter.Text = string.format("FPS: %d", math.floor(frameCount / delta))
+		frameCount = 0
+		lastTime = now
+	end
+end)
+
+-- Chams Highlights setup (event-driven)
+
+task.spawn(function()
+	while true do
+		task.wait(0.1)
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= Player then  -- Skip local player
+				local char = player.Character
+				if char then
+					-- Remove existing highlight if any
+					local existingHighlight = char:FindFirstChild(player.Name)
+					if existingHighlight then
+						existingHighlight:Destroy()
+					end
+
+					-- Create new highlight instance
+					local highlight = Instance.new("Highlight")
+					highlight.Name = player.Name
+					highlight.FillTransparency = 0.5
+					highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Neon green fill
+					highlight.OutlineColor = Color3.fromRGB(255, 255, 255) -- White outline
+					highlight.OutlineTransparency = 0
+					highlight.Adornee = char
+					highlight.Parent = char
+
+					-- Set nearly invisible transparency on fully invisible parts except HumanoidRootPart
+					for _, part in ipairs(char:GetDescendants()) do
+						if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Transparency == 1 then
+							part.Transparency = 0
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+-- Force ProximityPrompt hold duration to zero, event-driven
+
+local function forceInstantPrompt(prompt)
+	if prompt:IsA("ProximityPrompt") then
+		local text = prompt.ActionText
+		if text:find("Purchase") or text:find("Sell") then
+			if prompt.HoldDuration ~= 0 then
+				prompt.HoldDuration = 0
+			end
+			prompt.RequiresLineOfSight = false
+			prompt.ClickablePrompt = true
+			prompt.Exclusivity = Enum.ProximityPromptExclusivity.OneGlobally
+			prompt.Style = Enum.ProximityPromptStyle.Default
+			prompt.KeyboardKeyCode = Enum.KeyCode.E
+		end
+	end
+end
+
+for _, obj in ipairs(game:GetDescendants()) do
+	forceInstantPrompt(obj)
+end
+
+game.DescendantAdded:Connect(forceInstantPrompt)
+
+-- Position updater to check teleporting state and LifeaFarmOverlayPerformance GUI
+
+local function checkTeleportOnGui()
+	local pg = Player:FindFirstChild("PlayerGui")
+	if not pg then
+		task.delay(0.5, checkTeleportOnGui)
+		return
+	end
+
+	local gui = pg:FindFirstChild("LifeaFarmOverlayPerformance")
+	if not gui then
+		task.delay(0.5, checkTeleportOnGui)
+		return
+	end
+
+	for _, obj in ipairs(gui:GetDescendants()) do
+		if obj:IsA("TextLabel") and obj.Text == "Could not process server data." then
+			if not teleporting then
+				teleporting = true
+				pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, Player)
+				end)
+				return
+			end
+		end
+	end
+
+	task.delay(0.5, checkTeleportOnGui)
+end
+
+checkTeleportOnGui()
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Get character + humanoid
+local function getHumanoid()
+	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	return char:WaitForChild("Humanoid")
+end
+
+-- God Mode function
+local function enableGodMode(humanoid)
+	humanoid.MaxHealth = math.huge
+	humanoid.Health = math.huge
+
+	-- Prevent damage
+	humanoid.HealthChanged:Connect(function()
+		if humanoid.Health < humanoid.MaxHealth then
+			humanoid.Health = humanoid.MaxHealth
+		end
+	end)
+
+	-- Anti ragdoll
+	humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+		if humanoid.PlatformStand then
+			humanoid.PlatformStand = false
+		end
+	end)
+end
+
+-- Infinite Jump logic
+local jumpEnabled = true
+UserInputService.JumpRequest:Connect(function()
+	if jumpEnabled and LocalPlayer.Character then
+		local humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+		if humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+end)
+
+-- Run on spawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+	local hum = char:WaitForChild("Humanoid")
+	enableGodMode(hum)
+end)
+
+-- Initial setup
+if LocalPlayer.Character then
+	local hum = getHumanoid()
+	enableGodMode(hum)
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HRP = Character:WaitForChild("HumanoidRootPart")
+
+local animationId = "rbxassetid://71186871415348"
+local animationName = animationId:match("%d+")
+local walkSpeed = 30
+
+local function isTPWalkActive()
+	for _, track in ipairs(Humanoid:GetPlayingAnimationTracks()) do
+		if track.Animation.AnimationId:match("%d+") == animationName then
+			return true
+		end
+	end
+	return false
+end
+
+-- Teleport walk while animation is active
+RunService.RenderStepped:Connect(function(dt)
+	if not Character or not Humanoid or not HRP then return end
+	if isTPWalkActive() then
+		local moveDir = Humanoid.MoveDirection
+		if moveDir.Magnitude > 0 then
+			local step = moveDir.Unit * walkSpeed * dt
+			HRP.CFrame = HRP.CFrame + step
+		end
+	end
+end)
+
+-- Update references on respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+	Character = char
+	Humanoid = char:WaitForChild("Humanoid")
+	HRP = char:WaitForChild("HumanoidRootPart")
+end)
+
+local RunService = game:GetService("RunService")
+
+local promptCache = {} -- Tracks matching prompts only
+
+local function isMatchingPrompt(prompt)
+	if not prompt:IsA("ProximityPrompt") then return false end
+	local text = (prompt.ActionText or ""):lower()
+	return text:find("purchase") or text:find("sell")
+end
+
+local function forceInstant(prompt)
+	if isMatchingPrompt(prompt) then
+		if prompt.HoldDuration ~= 0 then
+			prompt.HoldDuration = 0
+		end
+		prompt.RequiresLineOfSight = false
+		prompt.ClickablePrompt = true
+		prompt.Exclusivity = Enum.ProximityPromptExclusivity.OneGlobally
+		prompt.Style = Enum.ProximityPromptStyle.Default
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+
+		promptCache[prompt] = true
+	end
+end
+
+-- Initial setup
+for _, obj in ipairs(game:GetDescendants()) do
+	if obj:IsA("ProximityPrompt") then
+		forceInstant(obj)
+	end
+end
+
+-- Listen for new prompts
+game.DescendantAdded:Connect(function(obj)
+	if obj:IsA("ProximityPrompt") then
+		task.defer(function()
+			forceInstant(obj)
+		end)
+	end
+end)
+
+-- Background maintenance: Only revalidate known matching prompts
+RunService.Heartbeat:Connect(function()
+	for prompt in pairs(promptCache) do
+		if prompt:IsDescendantOf(game) then
+			forceInstant(prompt)
+		else
+			promptCache[prompt] = nil -- Clean up if destroyed
+		end
+	end
+end)
