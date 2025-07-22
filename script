@@ -304,7 +304,7 @@ screenGui.Parent = CoreGui
 
 -- Create main frame
 local UI = Instance.new("Frame")
-UI.Size = UDim2.new(0, 140, 0, 100)
+UI.Size = UDim2.new(0, 140, 0, 65)
 UI.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
 UI.BorderSizePixel = 0
 UI.Parent = screenGui
@@ -366,7 +366,7 @@ end)
 -- Rejoin button
 local button = Instance.new("TextButton")
 button.Size = UDim2.new(1, 0, 0, 30)
-button.Position = UDim2.new(0, 0, 0.44, 0)
+button.Position = UDim2.new(0, 0, 0.70, 0)
 button.AnchorPoint = Vector2.new(0, 0.5)
 button.BackgroundColor3 = Color3.fromRGB(140, 0, 0)
 button.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -396,69 +396,7 @@ button.MouseButton1Click:Connect(function()
 		TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, Player)
 	end)
 end)
-
--- Hide GUI button
-local hideBtn = Instance.new("TextButton")
-hideBtn.Size = UDim2.new(1, 0, 0, 30)
-hideBtn.Position = UDim2.new(0, 0, 0.80, 0)
-hideBtn.AnchorPoint = Vector2.new(0, 0.5)
-hideBtn.BackgroundColor3 = Color3.fromRGB(90, 0, 0)
-hideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-hideBtn.Text = "Hide GUIs"
-hideBtn.Font = Enum.Font.GothamMedium
-hideBtn.TextSize = 16
-hideBtn.AutoButtonColor = false
-hideBtn.Parent = UI
-Instance.new("UICorner", hideBtn).CornerRadius = UDim.new(0, 6)
-
-hideBtn.MouseEnter:Connect(function()
-	TweenService:Create(hideBtn, TweenInfo.new(0.2), {
-		BackgroundColor3 = Color3.fromRGB(130, 0, 0)
-	}):Play()
-end)
-
-hideBtn.MouseLeave:Connect(function()
-	TweenService:Create(hideBtn, TweenInfo.new(0.2), {
-		BackgroundColor3 = Color3.fromRGB(90, 0, 0)
-	}):Play()
-end)
-
-local guisHidden = false
-hideBtn.MouseButton1Click:Connect(function()
-	guisHidden = not guisHidden
-	for _, gui in pairs(Player:WaitForChild("PlayerGui"):GetChildren()) do
-		if gui:IsA("ScreenGui") and gui ~= screenGui then
-			gui.Enabled = not guisHidden
-		end
-	end
-	hideBtn.Text = guisHidden and "Show GUIs" or "Hide GUIs"
-end)
-
--- Position updater for LifeaStealSystemGui (no loop, event driven)
-local targetPosition = UDim2.new(0.5, -458, 0.5, -180)
-
-local function setPositionTwice(gui)
-	local frame = gui:FindFirstChildWhichIsA("Frame", true)
-	if frame then
-		frame.Position = targetPosition
-		frame.Position = targetPosition
-	end
-end
-
-local function onGuiAdded(child)
-	if child.Name == "LifeaStealSystemGui" then
-		setPositionTwice(child)
-	end
-end
-
-local existingGui = Player.PlayerGui:FindFirstChild("LifeaStealSystemGui")
-if existingGui then
-	setPositionTwice(existingGui)
-end
-
-Player.PlayerGui.ChildAdded:Connect(onGuiAdded)
-
--- God Mode and Infinite Jump setup
+-- God Mode and Infinite Jump
 
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Player
@@ -502,35 +440,6 @@ if Player.Character then
 	setupCharacter(Player.Character)
 end
 Player.CharacterAdded:Connect(setupCharacter)
-
--- FPS Display (via RenderStepped)
-
-local fpsCounter = Instance.new("TextLabel")
-fpsCounter.Name = "FPSLabel"
-fpsCounter.Size = UDim2.new(0, 60, 0, 30)
-fpsCounter.Position = UDim2.new(1, -70, 0, 5)
-fpsCounter.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
-fpsCounter.BorderSizePixel = 0
-fpsCounter.TextColor3 = Color3.fromRGB(255, 255, 255)
-fpsCounter.Font = Enum.Font.GothamBold
-fpsCounter.TextSize = 16
-fpsCounter.Text = "FPS: 0"
-fpsCounter.Parent = screenGui
-Instance.new("UICorner", fpsCounter).CornerRadius = UDim.new(0, 6)
-
-local lastTime = tick()
-local frameCount = 0
-
-RunService.RenderStepped:Connect(function()
-	frameCount += 1
-	local now = tick()
-	local delta = now - lastTime
-	if delta >= 1 then
-		fpsCounter.Text = string.format("FPS: %d", math.floor(frameCount / delta))
-		frameCount = 0
-		lastTime = now
-	end
-end)
 
 -- Chams Highlights setup (event-driven)
 
