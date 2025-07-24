@@ -40,7 +40,14 @@ if LocalPlayer.Character then
 end
 LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
 
--- Brainrot Esp (Skip your base, clear leftover billboards)
+-- Brainrot Esp
+-- Brainrot Esp
+-- Brainrot Esp
+-- Brainrot Esp
+-- Brainrot Esp
+-- Brainrot Esp
+-- Brainrot Esp
+-- Brainrot Esp
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -756,14 +763,13 @@ local function updateRemainingTimeBillboards()
 			displayLabel.BackgroundTransparency = 1
 			displayLabel.TextScaled = true
 			displayLabel.Font = Enum.Font.FredokaOne
-			displayLabel.TextColor3 = Color3.fromRGB(160, 30, 30)
+			displayLabel.TextColor3 = Color3.fromRGB(34, 139, 34)
 			displayLabel.Text = timeLabel.Text
 			displayLabel.Parent = gui
 
 			local stroke = Instance.new("UIStroke")
 			stroke.Color = Color3.fromRGB(70, 0, 0)
-			stroke.Thickness = 4
-			stroke.Transparency = 0.2
+			stroke.Thickness = 2
 			stroke.Parent = displayLabel
 
 			timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
