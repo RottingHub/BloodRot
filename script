@@ -40,18 +40,13 @@ if LocalPlayer.Character then
 end
 LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
 
--- Brainrot Esp
--- Brainrot Esp
--- Brainrot Esp
--- Brainrot Esp
--- Brainrot Esp
--- Brainrot Esp
--- Brainrot Esp
--- Brainrot Esp
+-- Brainrot Esp (Skip your base, clear leftover billboards)
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local LocalPlayer = Players.LocalPlayer
 local multipliers = {
 	K = 1e3, M = 1e6, B = 1e9, T = 1e12, Q = 1e15,
 	Qa = 1e18, Qi = 1e21, Sx = 1e24, Sp = 1e27,
@@ -165,14 +160,64 @@ local function clearAllBillboards(spawns)
 	end
 end
 
+local function clearBillboardsOnPlot(plot)
+	if not plot then return end
+	local animalPodiums = plot:FindFirstChild("AnimalPodiums")
+	if not animalPodiums then return end
+	
+	for _, podium in ipairs(animalPodiums:GetChildren()) do
+		if podium:IsA("Model") then
+			local base = podium:FindFirstChild("Base")
+			if base then
+				local spawn = base:FindFirstChild("Spawn")
+				if spawn and spawn:IsA("BasePart") then
+					local gui = spawn:FindFirstChild("GenBillboard")
+					if gui then
+						gui:Destroy()
+					end
+				end
+			end
+		end
+	end
+end
+
 local cachedHighestValue = 0
 local cachedHighestSpawns = {}
 local cachedDisplayNameMap = {}
+
+local function spawnIsStillValid(spawn)
+	if not spawn or not spawn:IsDescendantOf(Workspace) then return false end
+	local attach = spawn:FindFirstChild("Attachment")
+	if not attach then return false end
+	local overhead = attach:FindFirstChild("AnimalOverhead")
+	if not overhead then return false end
+	local gen = overhead:FindFirstChild("Generation")
+	if not gen or gen.Text == "" or not extractValue(gen.Text) then return false end
+	return true
+end
+
+local function isMyBase(plot)
+	if not plot then return false end
+	local plotSign = plot:FindFirstChild("PlotSign")
+	if plotSign then
+		local yourBase = plotSign:FindFirstChild("YourBase")
+		if yourBase and yourBase.Enabled then
+			return true
+		end
+	end
+	return false
+end
 
 local function scanAndUpdate()
 	local spawns = {}
 
 	for _, plot in ipairs(Plots:GetChildren()) do
+		if isMyBase(plot) then
+			-- Clear any existing billboards on your base plot spawns
+			clearBillboardsOnPlot(plot)
+			continue -- Skip this plot entirely
+		end
+
 		local animalPodiums = plot:FindFirstChild("AnimalPodiums")
 		if animalPodiums then
 			for _, podium in ipairs(animalPodiums:GetChildren()) do
@@ -192,6 +237,7 @@ local function scanAndUpdate()
 											spawn = spawn,
 											genLabel = genLabel,
 											displayNameLabel = displayNameLabel,
+											value = extractValue(genLabel.Text) or 0
 										})
 									end
 								end
@@ -209,21 +255,26 @@ local function scanAndUpdate()
 	local currentHighestText = ""
 
 	for _, data in ipairs(spawns) do
-		local val = extractValue(data.genLabel.Text)
-		if val and val > 0 then
-			if val > currentHighest then
-				currentHighest = val
-				currentHighestSpawns = {data.spawn}
-				currentDisplayNameMap = {[data.spawn] = data.displayNameLabel.Text}
-				currentHighestText = data.genLabel.Text
-			elseif val == currentHighest then
-				table.insert(currentHighestSpawns, data.spawn)
-				currentDisplayNameMap[data.spawn] = data.displayNameLabel.Text
-			end
+		if data.value > currentHighest then
+			currentHighest = data.value
+			currentHighestSpawns = {data.spawn}
+			currentDisplayNameMap = {[data.spawn] = data.displayNameLabel.Text}
+			currentHighestText = data.genLabel.Text
+		elseif data.value == currentHighest then
+			table.insert(currentHighestSpawns, data.spawn)
+			currentDisplayNameMap[data.spawn] = data.displayNameLabel.Text
 		end
 	end
 
-	if currentHighest ~= cachedHighestValue then
+	local needsReset = false
+	for _, oldSpawn in pairs(cachedHighestSpawns) do
+		if not spawnIsStillValid(oldSpawn) then
+			needsReset = true
+			break
+		end
+	end
+
+	if currentHighest ~= cachedHighestValue or needsReset then
 		clearAllBillboards(cachedHighestSpawns)
 
 		for _, spawn in pairs(currentHighestSpawns) do
@@ -236,9 +287,7 @@ local function scanAndUpdate()
 	end
 end
 
-RunService.Heartbeat:Connect(function()
-	scanAndUpdate()
-end)
+RunService.Heartbeat:Connect(scanAndUpdate)
 
 -- Proximity Promt
 -- Proximity Promt
