@@ -112,7 +112,7 @@ local function showBillboard(spawnPart, generationText, displayNameText)
 	nameLabel.Position = UDim2.new(0, 0, 0, 0)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.TextScaled = true
-	nameLabel.Font = Enum.Font.FredokaOne
+	nameLabel.Font = Enum.Font.SourceSansBold
 	nameLabel.Text = displayNameText or ""
 	nameLabel.Parent = gui
 
@@ -131,7 +131,7 @@ local function showBillboard(spawnPart, generationText, displayNameText)
 	genLabel.Position = UDim2.new(0, 0, 0.55, 0)
 	genLabel.BackgroundTransparency = 1
 	genLabel.TextScaled = true
-	genLabel.Font = Enum.Font.FredokaOne
+	genLabel.Font = Enum.Font.SourceSansBold
 	genLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
 	genLabel.Text = generationText or ""
 	genLabel.Parent = gui
@@ -526,29 +526,30 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
-
 local walkSpeed = 108
 
-local function lockWalkSpeed(humanoid)
-	humanoid.WalkSpeed = walkSpeed
+-- Lock walkspeed ONLY if the player owns the tool
+local function lockWalkSpeedIfToolExists(humanoid)
+	local backpack = LocalPlayer:FindFirstChild("Backpack")
+	if not backpack then return end
 
-	humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-		if humanoid.WalkSpeed ~= walkSpeed then
-			humanoid.WalkSpeed = walkSpeed
-		end
-	end)
+	local hasTool = backpack:FindFirstChild("Invisibility Cloak") or Character:FindFirstChild("Invisibility Cloak")
+
+	if hasTool then
+		humanoid.WalkSpeed = walkSpeed
+		humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+			if humanoid.WalkSpeed ~= walkSpeed then
+				humanoid.WalkSpeed = walkSpeed
+			end
+		end)
+	end
 end
 
-lockWalkSpeed(Humanoid)
-
-LocalPlayer.CharacterAdded:Connect(function(char)
-	Character = char
-	Humanoid = char:WaitForChild("Humanoid")
-	lockWalkSpeed(Humanoid)
-end)
-
+-- Use invisibility cloak if available
 local function equipUseThenUnequip()
-	local backpack = LocalPlayer:WaitForChild("Backpack")
+	local backpack = LocalPlayer:FindFirstChild("Backpack")
+	if not backpack then return end
+
 	local tool = backpack:FindFirstChild("Invisibility Cloak")
 	if tool then
 		Humanoid:EquipTool(tool)
@@ -565,12 +566,17 @@ local function equipUseThenUnequip()
 	end
 end
 
+-- Initial tool check and use
 equipUseThenUnequip()
+lockWalkSpeedIfToolExists(Humanoid)
 
+-- On respawn
 LocalPlayer.CharacterAdded:Connect(function(char)
 	Character = char
 	Humanoid = char:WaitForChild("Humanoid")
+
 	equipUseThenUnequip()
+	lockWalkSpeedIfToolExists(Humanoid)
 end)
 
 -- Rejoin GUI
