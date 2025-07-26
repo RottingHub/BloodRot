@@ -143,20 +143,7 @@ local function showBillboard(spawnPart, generationText, displayNameText)
 	genStroke.Color = Color3.new(0, 0, 0)
 	genStroke.Parent = genLabel
 
-	local hue = 0
-	local connection
-	connection = RunService.Heartbeat:Connect(function(dt)
-		if nameLabel and nameLabel.Parent then
-			hue = (hue + dt * 0.25) % 1
-			nameLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
-		else
-			if connection then
-				connection:Disconnect()
-				connection = nil
-			end
-		end
-	end)
-end
+	nameLabel.TextColor3 = Color3.new(1, 1, 1) -- White
 
 local function clearAllBillboards(spawns)
 	for _, spawn in pairs(spawns) do
@@ -704,84 +691,84 @@ end)
 -- Base Timer
 -- Base Timer
 -- Base Timer
-
 local function updateRemainingTimeBillboards()
-	local plotsFolder = workspace:FindFirstChild("Plots")
-	if not plotsFolder then return end
+    local plotsFolder = workspace:FindFirstChild("Plots")
+    if not plotsFolder then return end
 
-	for _, plot in ipairs(plotsFolder:GetChildren()) do
-		if not plot:IsA("Model") then continue end
+    for , plot in ipairs(plotsFolder:GetChildren()) do
+        if not plot:IsA("Model") then continue end
 
-		local plotSign = plot:FindFirstChild("PlotSign")
-		if not plotSign then continue end
+        local plotSign = plot:FindFirstChild("PlotSign")
+        if not plotSign then continue end
 
-		local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
-		local isEmpty = false
-		if surfaceGui then
-			local frame = surfaceGui:FindFirstChildWhichIsA("Frame")
-			local label = frame and frame:FindFirstChildWhichIsA("TextLabel")
-			if label and label.Text == "Empty Base" then
-				isEmpty = true
-			end
-		end
-		if isEmpty then continue end
+        local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
+        local isEmpty = false
+        if surfaceGui then
+            local frame = surfaceGui:FindFirstChildWhichIsA("Frame")
+            local label = frame and frame:FindFirstChildWhichIsA("TextLabel")
+            if label and label.Text == "Empty Base" then
+                isEmpty = true
+            end
+        end
+        if isEmpty then continue end
 
-		local purchases = plot:FindFirstChild("Purchases")
-		if not purchases then continue end
+        local purchases = plot:FindFirstChild("Purchases")
+        if not purchases then continue end
 
-		local plotBlocks = {}
-		for _, block in ipairs(purchases:GetChildren()) do
-			if block.Name == "PlotBlock" then
-				table.insert(plotBlocks, block)
-			end
-		end
+        local plotBlocks = {}
+        for , block in ipairs(purchases:GetChildren()) do
+            if block.Name == "PlotBlock" then
+                table.insert(plotBlocks, block)
+            end
+        end
 
-		if #plotBlocks > 0 then
-			local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
-			local main = randomBlock:FindFirstChild("Main")
-			if not main then continue end
+        if #plotBlocks > 0 then
+            local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
+            local main = randomBlock:FindFirstChild("Main")
+            if not main then continue end
 
-			local billboard = main:FindFirstChildWhichIsA("BillboardGui")
-			local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
-			if not (timeLabel and timeLabel:IsA("TextLabel")) then continue end
+            local billboard = main:FindFirstChildWhichIsA("BillboardGui")
+            local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
+            if not (timeLabel and timeLabel:IsA("TextLabel")) then continue end
 
-			local friendPanel = plot:FindFirstChild("FriendPanel")
-			local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
-			if not friendMain then continue end
+            local friendPanel =
+plot:FindFirstChild("FriendPanel")
+            local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
+            if not friendMain then continue end
 
-			local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
-			if oldGui then
-				oldGui:Destroy()
-			end
+            local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
+            if oldGui then
+                oldGui:Destroy()
+            end
 
-			local gui = Instance.new("BillboardGui")
-			gui.Name = "RemainingTimeBillboard"
-			gui.Size = UDim2.new(0, 40, 0, 20)
-			gui.StudsOffset = Vector3.new(0, 5, 0)
-			gui.AlwaysOnTop = true
-			gui.MaxDistance = math.huge
-			gui.Adornee = friendMain.Parent
-			gui.Parent = friendMain
+            local gui = Instance.new("BillboardGui")
+            gui.Name = "RemainingTimeBillboard"
+            gui.Size = UDim2.new(0, 40, 0, 20)
+            gui.StudsOffset = Vector3.new(0, 5, 0)
+            gui.AlwaysOnTop = true
+            gui.MaxDistance = math.huge
+            gui.Adornee = friendMain.Parent
+            gui.Parent = friendMain
 
-			local displayLabel = Instance.new("TextLabel")
-			displayLabel.Size = UDim2.new(1, 0, 1, 0)
-			displayLabel.BackgroundTransparency = 1
-			displayLabel.TextScaled = true
-			displayLabel.Font = Enum.Font.FredokaOne
-			displayLabel.TextColor3 = Color3.fromRGB(34, 139, 34)
-			displayLabel.Text = timeLabel.Text
-			displayLabel.Parent = gui
+            local displayLabel = Instance.new("TextLabel")
+            displayLabel.Size = UDim2.new(1, 0, 1, 0)
+            displayLabel.BackgroundTransparency = 1
+            displayLabel.TextScaled = true
+            displayLabel.Font = Enum.Font.FredokaOne
+            displayLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+            displayLabel.Text = timeLabel.Text
+            displayLabel.Parent = gui
 
-			local stroke = Instance.new("UIStroke")
-			stroke.Color = Color3.fromRGB(70, 0, 0)
-			stroke.Thickness = 2
-			stroke.Parent = displayLabel
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(0, 0, 0)
+            stroke.Thickness = 2
+            stroke.Parent = displayLabel
 
-			timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
-				displayLabel.Text = timeLabel.Text
-			end)
-		end
-	end
+            timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                displayLabel.Text = timeLabel.Text
+            end)
+        end
+    end
 end
 
 updateRemainingTimeBillboards()
