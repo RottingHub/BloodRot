@@ -143,7 +143,8 @@ local function showBillboard(spawnPart, generationText, displayNameText)
 	genStroke.Color = Color3.new(0, 0, 0)
 	genStroke.Parent = genLabel
 
-	nameLabel.TextColor3 = Color3.new(1, 1, 1) -- White
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+end
 
 local function clearAllBillboards(spawns)
 	for _, spawn in pairs(spawns) do
