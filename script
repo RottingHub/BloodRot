@@ -691,11 +691,12 @@ end)
 -- Base Timer
 -- Base Timer
 -- Base Timer
+
 local function updateRemainingTimeBillboards()
     local plotsFolder = workspace:FindFirstChild("Plots")
     if not plotsFolder then return end
 
-    for , plot in ipairs(plotsFolder:GetChildren()) do
+    for _, plot in ipairs(plotsFolder:GetChildren()) do
         if not plot:IsA("Model") then continue end
 
         local plotSign = plot:FindFirstChild("PlotSign")
@@ -716,7 +717,7 @@ local function updateRemainingTimeBillboards()
         if not purchases then continue end
 
         local plotBlocks = {}
-        for , block in ipairs(purchases:GetChildren()) do
+        for _, block in ipairs(purchases:GetChildren()) do
             if block.Name == "PlotBlock" then
                 table.insert(plotBlocks, block)
             end
