@@ -699,6 +699,9 @@ end)
 -- Base Timer
 -- Base Timer
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
 local function updateRemainingTimeBillboards()
     local plotsFolder = workspace:FindFirstChild("Plots")
     if not plotsFolder then return end
@@ -712,8 +715,8 @@ local function updateRemainingTimeBillboards()
         local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
         local isEmpty = false
         if surfaceGui then
-            local frame = surfaceGui:FindFirstChildWhichIsA("Frame")
-            local label = frame and frame:FindFirstChildWhichIsA("TextLabel")
+            local frame = surfaceGui:FindFirstChild("Frame")
+            local label = frame and frame:FindFirstChild("TextLabel")
             if label and label.Text == "Empty Base" then
                 isEmpty = true
             end
@@ -739,8 +742,7 @@ local function updateRemainingTimeBillboards()
             local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
             if not (timeLabel and timeLabel:IsA("TextLabel")) then continue end
 
-            local friendPanel =
-plot:FindFirstChild("FriendPanel")
+            local friendPanel = plot:FindFirstChild("FriendPanel")
             local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
             if not friendMain then continue end
 
@@ -779,7 +781,20 @@ plot:FindFirstChild("FriendPanel")
     end
 end
 
+-- Initial run
 updateRemainingTimeBillboards()
+
+-- Also run when character loads
+local function onCharacterLoaded()
+    task.wait(1)
+    updateRemainingTimeBillboards()
+end
+
+if LocalPlayer.Character then
+    onCharacterLoaded()
+end
+
+LocalPlayer.CharacterAdded:Connect(onCharacterLoaded)
 
 -- Fps Counter
 -- Fps Counter
