@@ -444,6 +444,8 @@ local function createNameTag(character, player)
 end
 
 local function setupESPForPlayer(player)
+	if player == Player then return end
+
 	if espObjects[player] then
 		if espObjects[player].highlight then espObjects[player].highlight:Destroy() end
 		if espObjects[player].nameTag then espObjects[player].nameTag:Destroy() end
@@ -475,18 +477,21 @@ local function setupESPForPlayer(player)
 end
 
 Players.PlayerAdded:Connect(function(player)
+	if player == Player then return end
 	player.CharacterAdded:Connect(function()
 		setupESPForPlayer(player)
 	end)
 end)
 
 for _, player in pairs(Players:GetPlayers()) do
-	if player.Character then
-		setupESPForPlayer(player)
+	if player ~= Player then
+		if player.Character then
+			setupESPForPlayer(player)
+		end
+		player.CharacterAdded:Connect(function()
+			setupESPForPlayer(player)
+		end)
 	end
-	player.CharacterAdded:Connect(function()
-		setupESPForPlayer(player)
-	end)
 end
 
 -- Infinite Jump
