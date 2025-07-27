@@ -702,109 +702,113 @@ end)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local function addRemainingTimeBillboard(plot, retried)
-	local purchases = plot:FindFirstChild("Purchases")
-	if not purchases then
-		if not retried then
-			task.defer(function()
-				addRemainingTimeBillboard(plot, true)
-			end)
+local function handleLabelChange(label, plot)
+	local function createOrUpdateGUI(timeLabelText)
+		local purchases = plot:FindFirstChild("Purchases")
+		if not purchases then return end
+
+		local plotBlocks = {}
+		for _, block in ipairs(purchases:GetChildren()) do
+			if block.Name == "PlotBlock" then
+				table.insert(plotBlocks, block)
+			end
 		end
-		return
-	end
 
-	local plotBlocks = {}
-	for _, block in ipairs(purchases:GetChildren()) do
-		if block.Name == "PlotBlock" then
-			table.insert(plotBlocks, block)
-		end
-	end
+		if #plotBlocks == 0 then return end
+		local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
+		local main = randomBlock:FindFirstChild("Main")
+		if not main then return end
 
-	if #plotBlocks == 0 then
-		if not retried then
-			task.defer(function()
-				addRemainingTimeBillboard(plot, true)
-			end)
-		end
-		return
-	end
+		local billboard = main:FindFirstChildWhichIsA("BillboardGui")
+		local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
+		if not (timeLabel and timeLabel:IsA("TextLabel")) then return end
 
-	local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
-	local main = randomBlock:FindFirstChild("Main")
-	if not main then return end
+		local friendPanel = plot:FindFirstChild("FriendPanel")
+		local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
+		if not friendMain then return end
 
-	local billboard = main:FindFirstChildWhichIsA("BillboardGui")
-	local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
-	if not (timeLabel and timeLabel:IsA("TextLabel")) then return end
+		local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
+		if oldGui then oldGui:Destroy() end
 
-	local friendPanel = plot:FindFirstChild("FriendPanel")
-	local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
-	if not friendMain then return end
+		local gui = Instance.new("BillboardGui")
+		gui.Name = "RemainingTimeBillboard"
+		gui.Size = UDim2.new(0, 40, 0, 20)
+		gui.StudsOffset = Vector3.new(0, 5, 0)
+		gui.AlwaysOnTop = true
+		gui.MaxDistance = math.huge
+		gui.Adornee = friendMain.Parent
+		gui.Parent = friendMain
 
-	local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
-	if oldGui then
-		oldGui:Destroy()
-	end
-
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "RemainingTimeBillboard"
-	gui.Size = UDim2.new(0, 40, 0, 20)
-	gui.StudsOffset = Vector3.new(0, 5, 0)
-	gui.AlwaysOnTop = true
-	gui.MaxDistance = math.huge
-	gui.Adornee = friendMain.Parent
-	gui.Parent = friendMain
-
-	local displayLabel = Instance.new("TextLabel")
-	displayLabel.Size = UDim2.new(1, 0, 1, 0)
-	displayLabel.BackgroundTransparency = 1
-	displayLabel.TextScaled = true
-	displayLabel.Font = Enum.Font.FredokaOne
-	displayLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-	displayLabel.Text = timeLabel.Text
-	displayLabel.Parent = gui
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(0, 0, 0)
-	stroke.Thickness = 2
-	stroke.Parent = displayLabel
-
-	timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
+		local displayLabel = Instance.new("TextLabel")
+		displayLabel.Size = UDim2.new(1, 0, 1, 0)
+		displayLabel.BackgroundTransparency = 1
+		displayLabel.TextScaled = true
+		displayLabel.Font = Enum.Font.FredokaOne
+		displayLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 		displayLabel.Text = timeLabel.Text
-	end)
-end
+		displayLabel.Parent = gui
 
-local function monitorPlotLabel(plot)
-	local plotSign = plot:FindFirstChild("PlotSign")
-	if not plotSign then return end
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(0, 0, 0)
+		stroke.Thickness = 2
+		stroke.Parent = displayLabel
 
-	local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
-	local label = surfaceGui and surfaceGui:FindFirstChild("Frame") and surfaceGui.Frame:FindFirstChild("TextLabel")
-	if not label then return end
-
-	local function tryCreate()
-		if label.Text ~= "Empty Base" then
-			addRemainingTimeBillboard(plot)
-		end
+		timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
+			displayLabel.Text = timeLabel.Text
+		end)
 	end
 
-	tryCreate()
+	label:GetPropertyChangedSignal("Text"):Connect(function()
+		if label.Text == "Empty Base" then
+			local friendPanel = plot:FindFirstChild("FriendPanel")
+			local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
+			local oldGui = friendMain and friendMain:FindFirstChild("RemainingTimeBillboard")
+			if oldGui then oldGui:Destroy() end
+		else
+			createOrUpdateGUI(label.Text)
+		end
+	end)
 
-	label:GetPropertyChangedSignal("Text"):Connect(tryCreate)
+	-- Run once at start
+	if label.Text ~= "Empty Base" then
+		createOrUpdateGUI(label.Text)
+	end
 end
 
-local function setup()
+local function updateRemainingTimeBillboards()
 	local plotsFolder = workspace:FindFirstChild("Plots")
 	if not plotsFolder then return end
 
 	for _, plot in ipairs(plotsFolder:GetChildren()) do
-		monitorPlotLabel(plot)
-	end
+		if not plot:IsA("Model") then continue end
 
-	plotsFolder.ChildAdded:Connect(monitorPlotLabel)
+		local plotSign = plot:FindFirstChild("PlotSign")
+		if not plotSign then continue end
+
+		local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
+		if not surfaceGui then continue end
+
+		local frame = surfaceGui:FindFirstChild("Frame")
+		local label = frame and frame:FindFirstChild("TextLabel")
+		if label and label:IsA("TextLabel") then
+			handleLabelChange(label, plot)
+		end
+	end
 end
 
-setup()
+-- Initial run
+updateRemainingTimeBillboards()
+
+-- Also run on character load
+local function onCharacterLoaded()
+	updateRemainingTimeBillboards()
+end
+
+if LocalPlayer.Character then
+	onCharacterLoaded()
+end
+
+LocalPlayer.CharacterAdded:Connect(onCharacterLoaded)
 
 -- Fps Counter
 -- Fps Counter
