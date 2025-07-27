@@ -760,9 +760,7 @@ local function addRemainingTimeBillboard(plot)
 	end)
 end
 
-local function onPlotAdded(plot)
-	if not plot:IsA("Model") then return end
-
+local function monitorPlotLabel(plot)
 	local plotSign = plot:FindFirstChild("PlotSign")
 	if not plotSign then return end
 
@@ -770,15 +768,17 @@ local function onPlotAdded(plot)
 	local label = surfaceGui and surfaceGui:FindFirstChild("Frame") and surfaceGui.Frame:FindFirstChild("TextLabel")
 	if not label then return end
 
-	if label.Text == "Empty Base" then
-		label:GetPropertyChangedSignal("Text"):Connect(function()
-			if label.Text ~= "Empty Base" then
-				addRemainingTimeBillboard(plot)
-			end
-		end)
-	else
-		addRemainingTimeBillboard(plot)
+	local function tryCreate()
+		if label.Text ~= "Empty Base" then
+			addRemainingTimeBillboard(plot)
+		end
 	end
+
+	-- Initial check
+	tryCreate()
+
+	-- Watch for future ownership change
+	label:GetPropertyChangedSignal("Text"):Connect(tryCreate)
 end
 
 local function setup()
@@ -786,18 +786,16 @@ local function setup()
 	if not plotsFolder then return end
 
 	for _, plot in ipairs(plotsFolder:GetChildren()) do
-		onPlotAdded(plot)
+		monitorPlotLabel(plot)
 	end
 
-	plotsFolder.ChildAdded:Connect(onPlotAdded)
+	plotsFolder.ChildAdded:Connect(function(newPlot)
+		monitorPlotLabel(newPlot)
+	end)
 end
 
--- Run when character loads
-if LocalPlayer.Character then
-	setup()
-end
-LocalPlayer.CharacterAdded:Connect(setup)
-
+-- Run once
+setup()
 
 -- Fps Counter
 -- Fps Counter
