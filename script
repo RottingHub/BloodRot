@@ -702,9 +702,16 @@ end)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local function addRemainingTimeBillboard(plot)
+local function addRemainingTimeBillboard(plot, retried)
 	local purchases = plot:FindFirstChild("Purchases")
-	if not purchases then return end
+	if not purchases then
+		if not retried then
+			task.defer(function()
+				addRemainingTimeBillboard(plot, true)
+			end)
+		end
+		return
+	end
 
 	local plotBlocks = {}
 	for _, block in ipairs(purchases:GetChildren()) do
@@ -713,7 +720,14 @@ local function addRemainingTimeBillboard(plot)
 		end
 	end
 
-	if #plotBlocks == 0 then return end
+	if #plotBlocks == 0 then
+		if not retried then
+			task.defer(function()
+				addRemainingTimeBillboard(plot, true)
+			end)
+		end
+		return
+	end
 
 	local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
 	local main = randomBlock:FindFirstChild("Main")
@@ -774,10 +788,8 @@ local function monitorPlotLabel(plot)
 		end
 	end
 
-	-- Initial check
 	tryCreate()
 
-	-- Watch for future ownership change
 	label:GetPropertyChangedSignal("Text"):Connect(tryCreate)
 end
 
@@ -789,12 +801,9 @@ local function setup()
 		monitorPlotLabel(plot)
 	end
 
-	plotsFolder.ChildAdded:Connect(function(newPlot)
-		monitorPlotLabel(newPlot)
-	end)
+	plotsFolder.ChildAdded:Connect(monitorPlotLabel)
 end
 
--- Run once
 setup()
 
 -- Fps Counter
