@@ -758,7 +758,7 @@ local function handleLabelChange(label, plot)
 		end)
 	end
 
-	label:GetPropertyChangedSignal("Text"):Connect(function()
+	local function refresh()
 		if label.Text == "Empty Base" then
 			local friendPanel = plot:FindFirstChild("FriendPanel")
 			local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
@@ -767,12 +767,10 @@ local function handleLabelChange(label, plot)
 		else
 			createOrUpdateGUI(label.Text)
 		end
-	end)
-
-	-- Run once at start
-	if label.Text ~= "Empty Base" then
-		createOrUpdateGUI(label.Text)
 	end
+
+	refresh() -- handle initial state
+	label:GetPropertyChangedSignal("Text"):Connect(refresh) -- handle future changes
 end
 
 local function updateRemainingTimeBillboards()
