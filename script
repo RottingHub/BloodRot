@@ -700,11 +700,13 @@ end)
 -- Base Timer
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
+
+local handledPlots = {}
 
 -- Handles creation and updates of the RemainingTimeBillboard GUI for a given plot and label
 local function handleLabelChange(label, plot)
-	-- Create or update the billboard GUI based on current label text
 	local function createOrUpdateGUI()
 		local purchases = plot:FindFirstChild("Purchases")
 		if not purchases then return end
@@ -734,10 +736,7 @@ local function handleLabelChange(label, plot)
 			oldGui:Destroy()
 		end
 
-		-- Only create GUI if label text is not "Empty Base"
-		if label.Text == "Empty Base" then
-			return
-		end
+		if label.Text == "Empty Base" then return end
 
 		local gui = Instance.new("BillboardGui")
 		gui.Name = "RemainingTimeBillboard"
@@ -762,13 +761,11 @@ local function handleLabelChange(label, plot)
 		stroke.Thickness = 2
 		stroke.Parent = displayLabel
 
-		-- Update displayLabel whenever the source timeLabel text changes
 		timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
 			displayLabel.Text = timeLabel.Text
 		end)
 	end
 
-	-- Refresh the billboard gui depending on label text changes
 	local function refresh()
 		local friendPanel = plot:FindFirstChild("FriendPanel")
 		local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
@@ -784,19 +781,17 @@ local function handleLabelChange(label, plot)
 		end
 	end
 
-	-- Initial creation or destruction of GUI based on label text
 	refresh()
-	-- Listen for label text changes to update GUI automatically
 	label:GetPropertyChangedSignal("Text"):Connect(refresh)
 end
 
--- Scans all plots and attaches event-driven listeners to their remaining time labels
-local function updateRemainingTimeBillboards()
+-- Scans and handles new plots only
+local function updateNewRemainingTimeBillboards()
 	local plotsFolder = workspace:FindFirstChild("Plots")
 	if not plotsFolder then return end
 
 	for _, plot in ipairs(plotsFolder:GetChildren()) do
-		if not plot:IsA("Model") then continue end
+		if not plot:IsA("Model") or handledPlots[plot] then continue end
 
 		local plotSign = plot:FindFirstChild("PlotSign")
 		if not plotSign then continue end
@@ -807,17 +802,18 @@ local function updateRemainingTimeBillboards()
 		local frame = surfaceGui:FindFirstChild("Frame")
 		local label = frame and frame:FindFirstChildWhichIsA("TextLabel")
 		if label then
+			handledPlots[plot] = true
 			handleLabelChange(label, plot)
 		end
 	end
 end
 
 -- Initial run
-updateRemainingTimeBillboards()
+updateNewRemainingTimeBillboards()
 
--- Update when local player's character loads
+-- When local player's character loads
 local function onCharacterLoaded()
-	updateRemainingTimeBillboards()
+	updateNewRemainingTimeBillboards()
 end
 
 if LocalPlayer.Character then
@@ -826,9 +822,16 @@ end
 
 LocalPlayer.CharacterAdded:Connect(onCharacterLoaded)
 
--- Update when any player joins (could be used to update plots owned by new players)
 Players.PlayerAdded:Connect(function()
-	updateRemainingTimeBillboards()
+	updateNewRemainingTimeBillboards()
+end)
+
+-- Check for new plots every 1 second (non-blocking, doesn’t affect countdowns)
+task.spawn(function()
+	while true do
+		updateNewRemainingTimeBillboards()
+		task.wait(1)
+	end
 end)
 
 -- Fps Counter
