@@ -702,99 +702,102 @@ end)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local function updateRemainingTimeBillboards()
-    local plotsFolder = workspace:FindFirstChild("Plots")
-    if not plotsFolder then return end
+local function addRemainingTimeBillboard(plot)
+	local purchases = plot:FindFirstChild("Purchases")
+	if not purchases then return end
 
-    for _, plot in ipairs(plotsFolder:GetChildren()) do
-        if not plot:IsA("Model") then continue end
+	local plotBlocks = {}
+	for _, block in ipairs(purchases:GetChildren()) do
+		if block.Name == "PlotBlock" then
+			table.insert(plotBlocks, block)
+		end
+	end
 
-        local plotSign = plot:FindFirstChild("PlotSign")
-        if not plotSign then continue end
+	if #plotBlocks == 0 then return end
 
-        local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
-        local isEmpty = false
-        if surfaceGui then
-            local frame = surfaceGui:FindFirstChild("Frame")
-            local label = frame and frame:FindFirstChild("TextLabel")
-            if label and label.Text == "Empty Base" then
-                isEmpty = true
-            end
-        end
-        if isEmpty then continue end
+	local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
+	local main = randomBlock:FindFirstChild("Main")
+	if not main then return end
 
-        local purchases = plot:FindFirstChild("Purchases")
-        if not purchases then continue end
+	local billboard = main:FindFirstChildWhichIsA("BillboardGui")
+	local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
+	if not (timeLabel and timeLabel:IsA("TextLabel")) then return end
 
-        local plotBlocks = {}
-        for _, block in ipairs(purchases:GetChildren()) do
-            if block.Name == "PlotBlock" then
-                table.insert(plotBlocks, block)
-            end
-        end
+	local friendPanel = plot:FindFirstChild("FriendPanel")
+	local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
+	if not friendMain then return end
 
-        if #plotBlocks > 0 then
-            local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
-            local main = randomBlock:FindFirstChild("Main")
-            if not main then continue end
+	local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
+	if oldGui then
+		oldGui:Destroy()
+	end
 
-            local billboard = main:FindFirstChildWhichIsA("BillboardGui")
-            local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
-            if not (timeLabel and timeLabel:IsA("TextLabel")) then continue end
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "RemainingTimeBillboard"
+	gui.Size = UDim2.new(0, 40, 0, 20)
+	gui.StudsOffset = Vector3.new(0, 5, 0)
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = math.huge
+	gui.Adornee = friendMain.Parent
+	gui.Parent = friendMain
 
-            local friendPanel = plot:FindFirstChild("FriendPanel")
-            local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
-            if not friendMain then continue end
+	local displayLabel = Instance.new("TextLabel")
+	displayLabel.Size = UDim2.new(1, 0, 1, 0)
+	displayLabel.BackgroundTransparency = 1
+	displayLabel.TextScaled = true
+	displayLabel.Font = Enum.Font.FredokaOne
+	displayLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+	displayLabel.Text = timeLabel.Text
+	displayLabel.Parent = gui
 
-            local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
-            if oldGui then
-                oldGui:Destroy()
-            end
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(0, 0, 0)
+	stroke.Thickness = 2
+	stroke.Parent = displayLabel
 
-            local gui = Instance.new("BillboardGui")
-            gui.Name = "RemainingTimeBillboard"
-            gui.Size = UDim2.new(0, 40, 0, 20)
-            gui.StudsOffset = Vector3.new(0, 5, 0)
-            gui.AlwaysOnTop = true
-            gui.MaxDistance = math.huge
-            gui.Adornee = friendMain.Parent
-            gui.Parent = friendMain
-
-            local displayLabel = Instance.new("TextLabel")
-            displayLabel.Size = UDim2.new(1, 0, 1, 0)
-            displayLabel.BackgroundTransparency = 1
-            displayLabel.TextScaled = true
-            displayLabel.Font = Enum.Font.FredokaOne
-            displayLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-            displayLabel.Text = timeLabel.Text
-            displayLabel.Parent = gui
-
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = Color3.fromRGB(0, 0, 0)
-            stroke.Thickness = 2
-            stroke.Parent = displayLabel
-
-            timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                displayLabel.Text = timeLabel.Text
-            end)
-        end
-    end
+	timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
+		displayLabel.Text = timeLabel.Text
+	end)
 end
 
--- Initial run
-updateRemainingTimeBillboards()
+local function onPlotAdded(plot)
+	if not plot:IsA("Model") then return end
 
--- Also run when character loads
-local function onCharacterLoaded()
-    task.wait(1)
-    updateRemainingTimeBillboards()
+	local plotSign = plot:FindFirstChild("PlotSign")
+	if not plotSign then return end
+
+	local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
+	local label = surfaceGui and surfaceGui:FindFirstChild("Frame") and surfaceGui.Frame:FindFirstChild("TextLabel")
+	if not label then return end
+
+	if label.Text == "Empty Base" then
+		label:GetPropertyChangedSignal("Text"):Connect(function()
+			if label.Text ~= "Empty Base" then
+				addRemainingTimeBillboard(plot)
+			end
+		end)
+	else
+		addRemainingTimeBillboard(plot)
+	end
 end
 
+local function setup()
+	local plotsFolder = workspace:FindFirstChild("Plots")
+	if not plotsFolder then return end
+
+	for _, plot in ipairs(plotsFolder:GetChildren()) do
+		onPlotAdded(plot)
+	end
+
+	plotsFolder.ChildAdded:Connect(onPlotAdded)
+end
+
+-- Run when character loads
 if LocalPlayer.Character then
-    onCharacterLoaded()
+	setup()
 end
+LocalPlayer.CharacterAdded:Connect(setup)
 
-LocalPlayer.CharacterAdded:Connect(onCharacterLoaded)
 
 -- Fps Counter
 -- Fps Counter
