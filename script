@@ -703,133 +703,104 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
-local handledPlots = {}
+local handled = {}
 
--- Handles creation and updates of the RemainingTimeBillboard GUI for a given plot and label
-local function handleLabelChange(label, plot)
-	local function createOrUpdateGUI()
-		local purchases = plot:FindFirstChild("Purchases")
-		if not purchases then return end
+local function createBillboard(plot, label, timeLabel)
+	local friendPanel = plot:FindFirstChild("FriendPanel")
+	local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
+	if not friendMain then return end
 
-		local plotBlocks = {}
+	local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
+	if oldGui then oldGui:Destroy() end
+
+	if label.Text == "Empty Base" then
+		handled[plot] = nil
+		return
+	end
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "RemainingTimeBillboard"
+	gui.Size = UDim2.new(0, 40, 0, 20)
+	gui.StudsOffset = Vector3.new(0, 5, 0)
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = math.huge
+	gui.Adornee = friendMain.Parent
+	gui.Parent = friendMain
+
+	local text = Instance.new("TextLabel")
+	text.Size = UDim2.new(1, 0, 1, 0)
+	text.BackgroundTransparency = 1
+	text.TextScaled = true
+	text.Font = Enum.Font.FredokaOne
+	text.TextColor3 = Color3.fromRGB(0, 255, 0)
+	text.Text = timeLabel.Text
+	text.Parent = gui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.new(0, 0, 0)
+	stroke.Thickness = 2
+	stroke.Parent = text
+
+	timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
+		text.Text = timeLabel.Text
+	end)
+
+	label:GetPropertyChangedSignal("Text"):Connect(function()
+		if label.Text == "Empty Base" then
+			local g = friendMain:FindFirstChild("RemainingTimeBillboard")
+			if g then g:Destroy() end
+			handled[plot] = nil
+		end
+	end)
+
+	handled[plot] = true
+end
+
+local function tryHandlePlot(plot)
+	if handled[plot] then return end
+
+	local sign = plot:FindFirstChild("PlotSign")
+	local surfaceGui = sign and sign:FindFirstChild("SurfaceGui")
+	local frame = surfaceGui and surfaceGui:FindFirstChild("Frame")
+	local label = frame and frame:FindFirstChildWhichIsA("TextLabel")
+	if not label or label.Text == "Empty Base" then return end
+
+	local purchases = plot:FindFirstChild("Purchases")
+	local timeLabel
+	if purchases then
 		for _, block in ipairs(purchases:GetChildren()) do
 			if block.Name == "PlotBlock" then
-				table.insert(plotBlocks, block)
+				local main = block:FindFirstChild("Main")
+				local gui = main and main:FindFirstChildWhichIsA("BillboardGui")
+				local found = gui and gui:FindFirstChild("RemainingTime")
+				if found and found:IsA("TextLabel") then
+					timeLabel = found
+					break
+				end
 			end
 		end
-		if #plotBlocks == 0 then return end
-
-		local randomBlock = plotBlocks[math.random(1, #plotBlocks)]
-		local main = randomBlock:FindFirstChild("Main")
-		if not main then return end
-
-		local billboard = main:FindFirstChildWhichIsA("BillboardGui")
-		local timeLabel = billboard and billboard:FindFirstChild("RemainingTime")
-		if not (timeLabel and timeLabel:IsA("TextLabel")) then return end
-
-		local friendPanel = plot:FindFirstChild("FriendPanel")
-		local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
-		if not friendMain then return end
-
-		local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
-		if oldGui then
-			oldGui:Destroy()
-		end
-
-		if label.Text == "Empty Base" then return end
-
-		local gui = Instance.new("BillboardGui")
-		gui.Name = "RemainingTimeBillboard"
-		gui.Size = UDim2.new(0, 40, 0, 20)
-		gui.StudsOffset = Vector3.new(0, 5, 0)
-		gui.AlwaysOnTop = true
-		gui.MaxDistance = math.huge
-		gui.Adornee = friendMain.Parent
-		gui.Parent = friendMain
-
-		local displayLabel = Instance.new("TextLabel")
-		displayLabel.Size = UDim2.new(1, 0, 1, 0)
-		displayLabel.BackgroundTransparency = 1
-		displayLabel.TextScaled = true
-		displayLabel.Font = Enum.Font.FredokaOne
-		displayLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-		displayLabel.Text = timeLabel.Text
-		displayLabel.Parent = gui
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(0, 0, 0)
-		stroke.Thickness = 2
-		stroke.Parent = displayLabel
-
-		timeLabel:GetPropertyChangedSignal("Text"):Connect(function()
-			displayLabel.Text = timeLabel.Text
-		end)
 	end
 
-	local function refresh()
-		local friendPanel = plot:FindFirstChild("FriendPanel")
-		local friendMain = friendPanel and friendPanel:FindFirstChild("Main")
-		if friendMain then
-			local oldGui = friendMain:FindFirstChild("RemainingTimeBillboard")
-			if oldGui then
-				oldGui:Destroy()
-			end
-		end
-
-		if label.Text ~= "Empty Base" then
-			createOrUpdateGUI()
-		end
+	if timeLabel then
+		createBillboard(plot, label, timeLabel)
 	end
-
-	refresh()
-	label:GetPropertyChangedSignal("Text"):Connect(refresh)
 end
 
--- Scans and handles new plots only
-local function updateNewRemainingTimeBillboards()
-	local plotsFolder = workspace:FindFirstChild("Plots")
-	if not plotsFolder then return end
-
-	for _, plot in ipairs(plotsFolder:GetChildren()) do
-		if not plot:IsA("Model") or handledPlots[plot] then continue end
-
-		local plotSign = plot:FindFirstChild("PlotSign")
-		if not plotSign then continue end
-
-		local surfaceGui = plotSign:FindFirstChild("SurfaceGui")
-		if not surfaceGui then continue end
-
-		local frame = surfaceGui:FindFirstChild("Frame")
-		local label = frame and frame:FindFirstChildWhichIsA("TextLabel")
-		if label then
-			handledPlots[plot] = true
-			handleLabelChange(label, plot)
+local function scanPlots()
+	local plots = workspace:FindFirstChild("Plots")
+	if not plots then return end
+	for _, plot in ipairs(plots:GetChildren()) do
+		if plot:IsA("Model") then
+			tryHandlePlot(plot)
 		end
 	end
 end
 
--- Initial run
-updateNewRemainingTimeBillboards()
+scanPlots()
 
--- When local player's character loads
-local function onCharacterLoaded()
-	updateNewRemainingTimeBillboards()
-end
-
-if LocalPlayer.Character then
-	onCharacterLoaded()
-end
-
-LocalPlayer.CharacterAdded:Connect(onCharacterLoaded)
-
-Players.PlayerAdded:Connect(function()
-	updateNewRemainingTimeBillboards()
-end)
-
--- Check for new plots every 1 second (non-blocking, doesn’t affect countdowns)
 task.spawn(function()
 	while true do
-		updateNewRemainingTimeBillboards()
+		scanPlots()
 		task.wait(1)
 	end
 end)
